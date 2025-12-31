@@ -19,7 +19,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://generateur-de-fiche-de-poste.vercel.app",
+    "http://localhost:1303",
+    "http://localhost:3000"
+  ],
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"],
+  exposedHeaders: ["Content-Disposition", "Content-Length"]
+}));
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -280,7 +289,7 @@ app.post('/api/generate-fiche', async (req, res) => {
     // Générer le document Word (en mémoire)
     const wordBuffer = generateWordDocument(ficheContent, data);
 
-    // Générer un nom de fichier cohérent (sans sauvegarder)
+    // Générer un nom de fichier cohérent
     const timestamp = new Date().toISOString()
       .replace(/[:.]/g, '-')
       .replace('T', '_')
@@ -294,14 +303,16 @@ app.post('/api/generate-fiche', async (req, res) => {
 
     const filename = `fiche_${safeTitre}_${timestamp}.docx`;
 
-    // Envoyer le .docx directement en tant que téléchargement
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', wordBuffer.length);
-    // Optionnel: fournir le contenu texte nettoyé dans un header (utile si besoin)
-    res.setHeader('X-Fiche-Text-Length', Buffer.byteLength(ficheContent, 'utf8'));
+    // Sauvegarder le fichier sur le serveur (dans /fiches)
+    const saved = saveToFile(wordBuffer, data.titre, 'docx');
 
-    res.send(wordBuffer);
+    // Répondre en JSON avec l'URL de téléchargement
+    res.json({
+      success: true,
+      filename: saved.filename,
+      downloadUrl: `/api/download-fiche/${saved.filename}`,
+      preview: ficheContent
+    });
     
   } catch (error) {
     console.error('❌ Erreur:', error);
@@ -406,6 +417,11 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
+
+// Route racine simple pour éviter les timeouts de cold start
+app.get('/', (req, res) => {
+  res.send('Backend Job Generator OK 🚀');
+});
 
 // ==================== LANCEMENT DU SERVEUR ====================
 // Vérification de la clé API
