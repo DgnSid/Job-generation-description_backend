@@ -408,16 +408,6 @@ app.get('/api/list-fiches', (req, res) => {
   }
 });
 
-// Servir le frontend si en production
-if (process.env.NODE_ENV === 'production') {
-  const frontendPath = path.join(__dirname, '../frontend');
-  app.use(express.static(frontendPath));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  });
-}
-
 // Route racine simple pour éviter les timeouts de cold start
 app.get('/', (req, res) => {
   res.send('Backend Job Generator OK 🚀');
