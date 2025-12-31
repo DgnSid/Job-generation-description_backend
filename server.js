@@ -6,8 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import dotenv from "dotenv";
-import Docxtemplater from "docxtemplater";
-import PizZip from "pizzip";
+import { Document, Packer, Paragraph, convertInchesToTwip } from "docx";
 
 // Configuration
 dotenv.config();
@@ -140,76 +139,75 @@ function buildUserPrompt(data) {
 
 function generateWordDocument(content, data) {
   try {
-    // Chemin vers le template Word
-    const templatePath = path.join(__dirname, 'template.docx');
+    // Générer un vrai document Word avec la libraire docx
+    const paragraphs = [];
     
-    // Si le template n'existe pas, créer un document simple
-    if (!fs.existsSync(templatePath)) {
-      return generateSimpleWordDocument(content, data);
-    }
+    // Titre : Entreprise
+    paragraphs.push(new Paragraph({
+      text: data.entreprise,
+      bold: true,
+      size: 24 * 2, // 24pt
+    }));
     
-    // Lire le template
-    const templateContent = fs.readFileSync(templatePath, 'binary');
-    const zip = new PizZip(templateContent);
+    // Titre : Fiche de poste
+    paragraphs.push(new Paragraph({
+      text: `FICHE DE POSTE : ${data.titre}`,
+      bold: true,
+      size: 22 * 2,
+    }));
     
-    // Initialiser docxtemplater
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
+    // Contenu : diviser par lignes et créer des paragraphes
+    const lines = content.split('\n').filter(line => line.trim());
+    lines.forEach(line => {
+      paragraphs.push(new Paragraph({
+        text: line,
+        size: 11 * 2, // 11pt
+      }));
     });
     
-    // Préparer les données pour le template
-    const templateData = {
-      titre: data.titre,
-      entreprise: data.entreprise,
-      secteur: data.secteur,
-      date: new Date().toLocaleDateString('fr-FR'),
-      content: content.replace(/\n/g, '</w:t><w:br/><w:t>'),
-    };
-    
-    // Remplir le template
-    doc.setData(templateData);
-    doc.render();
-    
-    // Générer le document
-    const buf = doc.getZip().generate({
-      type: 'nodebuffer',
-      compression: 'DEFLATE',
+    // Créer le document
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs,
+      }],
     });
     
-    return buf;
+    // Générer le buffer
+    return Packer.toBuffer(doc);
   } catch (error) {
     console.error('Erreur lors de la génération du Word:', error);
-    // Fallback: générer un document simple
     return generateSimpleWordDocument(content, data);
   }
 }
 
 function generateSimpleWordDocument(content, data) {
-  // Créer un document Word simple avec XML
-  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<?mso-application progid="Word.Document"?>
-<w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml">
-  <w:body>
-    <w:p>
-      <w:r>
-        <w:t>${data.entreprise}</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>FICHE DE POSTE : ${data.titre}</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>${content.replace(/\n/g, '</w:t></w:r></w:p><w:p><w:r><w:t>')}</w:t>
-      </w:r>
-    </w:p>
-  </w:body>
-</w:wordDocument>`;
+  // Fallback : document basique avec docx
+  const paragraphs = [
+    new Paragraph({
+      text: data.entreprise,
+      bold: true,
+    }),
+    new Paragraph({
+      text: `FICHE DE POSTE : ${data.titre}`,
+      bold: true,
+    }),
+  ];
   
-  return Buffer.from(xml, 'utf8');
+  content.split('\n').forEach(line => {
+    if (line.trim()) {
+      paragraphs.push(new Paragraph({ text: line }));
+    }
+  });
+  
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: paragraphs,
+    }],
+  });
+  
+  return Packer.toBuffer(doc);
 }
 
 function saveToFile(content, titre, format = 'txt') {
