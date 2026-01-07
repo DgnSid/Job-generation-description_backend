@@ -19,16 +19,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-  origin: [
-    "https://generateur-de-fiche-de-poste.vercel.app",
-    "http://localhost:1303",
-    "http://localhost:3000"
-  ],
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"],
-  exposedHeaders: ["Content-Disposition", "Content-Length"]
-}));
+// CORS configuration: restrict in production, permissive in development for live-reload tooling
+if (process.env.NODE_ENV === 'production') {
+  app.use(cors({
+    origin: [
+      "https://generateur-de-fiche-de-poste.vercel.app",
+      "http://localhost:1303",
+      "http://localhost:3000"
+    ],
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+    exposedHeaders: ["Content-Disposition", "Content-Length"]
+  }));
+} else {
+  // Development: allow all origins to simplify local testing (including Live Server on 5500)
+  app.use(cors());
+}
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -303,14 +309,12 @@ app.post('/api/generate-fiche', async (req, res) => {
 
     const filename = `fiche_${safeTitre}_${timestamp}.docx`;
 
-    // Sauvegarder le fichier sur le serveur (dans /fiches)
-    const saved = saveToFile(wordBuffer, data.titre, 'docx');
-
-    // Répondre en JSON avec l'URL de téléchargement
+    // 🚫 PAS de sauvegarde sur disque - envoyer directement au client
+    // Répondre en JSON avec le fichier en base64 pour téléchargement direct
     res.json({
       success: true,
-      filename: saved.filename,
-      downloadUrl: `/api/download-fiche/${saved.filename}`,
+      filename: filename,
+      fileData: wordBuffer.toString('base64'),  // Envoyer le fichier en base64
       preview: ficheContent
     });
     
